@@ -1,0 +1,75 @@
+name: build ipa
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.3"
+  GODOT_FULL_VERSION: "4.3.stable"
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          godot-version: ${{ env.GODOT_VERSION }}
+
+      - name: installing templates
+        run: |
+          TEMPLATE_URL="https://github.com/godotengine/godot/releases/download/${GODOT_FULL_VERSION}/Godot_v${GODOT_FULL_VERSION}_export_templates.tpz"
+          
+          curl -L $TEMPLATE_URL -o templates.tpz
+          
+          TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_FULL_VERSION}"
+          mkdir -p "$TEMPLATE_DIR"
+          
+          unzip -q templates.tpz -d "$TEMPLATE_DIR"
+          mv "$TEMPLATE_DIR"/templates/* "$TEMPLATE_DIR"/
+          rm -rf "$TEMPLATE_DIR"/templates templates.tpz
+          
+          echo "Templates instalados com sucesso em: $TEMPLATE_DIR"
+
+      - name: create directories
+        run: |
+          mkdir -p build/ios_xcode
+          mkdir -p build/output
+
+      - name: export to xcode
+        run: |
+          godot --headless --export-release "iOS" build/ios_xcode/polytoria.xcodeproj
+
+      - name: compiling
+        run: |
+          cd build/ios_xcode
+          xcodebuild build \
+            -project *.xcodeproj \
+            -scheme *.xcodeproj \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            PROVISIONING_PROFILE_SPECIFIER=""
+
+      - name: Generate ipa
+        run: |
+          mkdir -p Payload
+          
+          cp -r build/ios_xcode/build/Release-iphoneos/*.app Payload/
+          
+          zip -r build/output/Polytoria_TrollStore.ipa Payload
+          
+
+      - name: upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Polytoria-TrollStore-IPA
+          path: build/output/Polytoria_TrollStore.ipa
