@@ -5,10 +5,6 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-env:
-  GODOT_VERSION: "4.3"
-  GODOT_FULL_VERSION: "4.3.stable"
-
 jobs:
   build-ipa:
     runs-on: macos-latest
@@ -17,54 +13,31 @@ jobs:
       - name: Checkout do Repositório
         uses: actions/checkout@v4
 
-      # 1. Instalar o .NET SDK necessário para compilar os scripts C# do Godot Mono
+      # 1. Instalar o .NET SDK necessário para o Godot Mono
       - name: Configurar .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0' # Ajuste para a versão do .NET que o seu Godot usa (ex: .NET 8 para Godot 4.3)
+          dotnet-version: '8.0'
 
-      # 2. Instalar o Godot Mono (com suporte a C# ativado)
-      - name: Instalar Godot Mono Engine
+      # 2. Instalar o Godot Mono e os templates automaticamente (usando a versão completa correta)
+      - name: Instalar Godot Mono & Templates
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: ${{ env.GODOT_VERSION }}
-          use-dotnet: true
-
-      # 3. Baixar e instalar os Export Templates do Godot Mono (versão .mono)
-      - name: Baixar e Configurar Export Templates Mono
-        run: |
-          TEMPLATE_URL="https://github.com/godotengine/godot/releases/download/${GODOT_FULL_VERSION}/Godot_v${GODOT_FULL_VERSION}_mono_export_templates.tpz"
-          
-          echo "Baixando templates Mono de: $TEMPLATE_URL"
-          curl -L $TEMPLATE_URL -o templates.tpz
-          
-          TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_FULL_VERSION}"
-          mkdir -p "$TEMPLATE_DIR"
-          
-          unzip -q templates.tpz -d "$TEMPLATE_DIR"
-          # O Godot Mono geralmente extrai para uma pasta com o sufixo _mono ou direto, vamos tratar ambos
-          if [ -d "$TEMPLATE_DIR"/templates_* ]; then
-            mv "$TEMPLATE_DIR"/templates_*/* "$TEMPLATE_DIR"/
-            rm -rf "$TEMPLATE_DIR"/templates_*
-          elif [ -d "$TEMPLATE_DIR"/templates ]; then
-            mv "$TEMPLATE_DIR"/templates/* "$TEMPLATE_DIR"/
-            rm -rf "$TEMPLATE_DIR"/templates
-          fi
-          
-          rm templates.tpz
-          echo "Templates Mono instalados com sucesso em: $TEMPLATE_DIR"
+          version: "4.7.2"         # Versão completa exigida pela action para Godot 4.3
+          use-dotnet: true         # Ativa o suporte ao C# / Mono
+          include-templates: true  # Baixa os export templates automaticamente
 
       - name: Criar diretórios de build
         run: |
           mkdir -p build/ios_xcode
           mkdir -p build/output
 
-      # 4. Exportar o projeto Godot Mono para Xcode (o Godot compila as soluções C# automaticamente durante o export)
+      # 3. Exportar o projeto para Xcode
       - name: Exportar Godot para Xcode
         run: |
           godot --headless --export-release "iOS" build/ios_xcode/polytoria.xcodeproj
 
-      # 5. Compilar o projeto no Xcode (Ad-hoc)
+      # 4. Compilar o projeto no Xcode sem assinatura (Ad-hoc)
       - name: Compilar com Xcode (Release Ad-hoc)
         run: |
           cd build/ios_xcode
@@ -78,7 +51,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             PROVISIONING_PROFILE_SPECIFIER=""
 
-      # 6. Gerar o arquivo .IPA final
+      # 5. Gerar o arquivo .IPA final
       - name: Gerar Arquivo IPA
         run: |
           mkdir -p Payload
@@ -86,6 +59,7 @@ jobs:
           zip -r build/output/Polytoria_Mono_TrollStore.ipa Payload
           echo "IPA Mono gerado com sucesso!"
 
+      # 6. Enviar para download nos Artifacts
       - name: Enviar IPA para Download
         uses: actions/upload-artifact@v4
         with:
